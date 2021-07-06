@@ -13,6 +13,10 @@ RUN set -ux \
  && git remote add origin https://github.com/google/mediapipe \
  && git fetch --depth 1 origin $MEDIAPIPE_COMMIT \
  && git checkout FETCH_HEAD
+RUN set -ux \
+# Work around https://github.com/bazelbuild/rules_cc/issues/107
+ && sed -i 's%strip_prefix = "rules_cc-master",%strip_prefix = "rules_cc-main",%' WORKSPACE \
+ && sed -i 's%rules_cc/archive/master.zip%rules_cc/archive/main.zip%' WORKSPACE
 FROM scratch AS mediapipe-src
 COPY --from=mediapipe-src-builder /w /
 
