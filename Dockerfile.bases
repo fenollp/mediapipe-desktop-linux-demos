@@ -88,6 +88,14 @@ RUN \
                 mediapipe/examples/desktop/hello_world:hello_world \
  && mkdir /x \
  && cp ./bazel-bin/mediapipe/examples/desktop/hello_world/hello_world /x/hello_world_cpu
+RUN \
+  --mount=type=cache,target=/root/.cache/bazel \
+    set -ux \
+ && bazel build $(cat /bazelflags) \
+                -c opt \
+                --define MEDIAPIPE_DISABLE_GPU=1 \
+                mediapipe/examples/desktop/hand_tracking:hand_tracking_cpu \
+ && cp ./bazel-bin/mediapipe/examples/desktop/hand_tracking/hand_tracking_cpu /x/
 
 FROM scratch AS hello_world_cpu
 COPY --from=base-cpu /x/hello_world_cpu /
@@ -110,6 +118,14 @@ RUN \
                 --copt -DMESA_EGL_NO_X11_HEADERS --copt -DEGL_NO_X11 \
                 mediapipe/examples/desktop/hello_world:hello_world \
  && cp ./bazel-bin/mediapipe/examples/desktop/hello_world/hello_world /x/hello_world_gpu
+RUN \
+  --mount=type=cache,target=/root/.cache/bazel \
+    set -ux \
+ && bazel build $(cat /bazelflags) \
+                -c opt \
+                --copt -DMESA_EGL_NO_X11_HEADERS --copt -DEGL_NO_X11 \
+                mediapipe/examples/desktop/hand_tracking:hand_tracking_gpu \
+ && cp ./bazel-bin/mediapipe/examples/desktop/hand_tracking/hand_tracking_gpu /x/
 
 FROM scratch AS hello_world_gpu
 COPY --from=base-gpu /x/hello_world_gpu /
