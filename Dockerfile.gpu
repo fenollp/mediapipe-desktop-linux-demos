@@ -1,5 +1,6 @@
 FROM base-gpu AS builder-EXAMPLE_gpu
 RUN \
+  --mount=from=mediapipe-src,source=/w,target=/mediapipe,rw \
   --mount=type=cache,target=/root/.cache/bazel \
     set -ux \
  && bazel build $(cat /bazelflags) \

@@ -1,26 +1,17 @@
 # syntax=docker.io/docker/dockerfile:1.2@sha256:e2a8561e419ab1ba6b2fe6cbdf49fd92b95912df1cf7d313c3e2230a333fdbcc
 
-# DOCKER_BUILDKIT=1 docker build --target=hello_world_cpu -o=bin/ .
-# GLOG_logtostderr=1 ./hello_world_cpu
-
-FROM --platform=$BUILDPLATFORM docker.io/library/alpine@sha256:234cb88d3020898631af0ccbbcca9a66ae7306ecd30c9720690858c1b007d2a0 AS mediapipe-src-builder
+FROM --platform=$BUILDPLATFORM docker.io/library/alpine@sha256:234cb88d3020898631af0ccbbcca9a66ae7306ecd30c9720690858c1b007d2a0 AS mediapipe-src
 WORKDIR /w
 ARG MEDIAPIPE_COMMIT
 RUN set -ux \
- && apk update \
- && apk add git \
+ && apk add --no-cache git \
  && git init \
  && git remote add origin https://github.com/google/mediapipe \
  && git fetch --depth 1 origin $MEDIAPIPE_COMMIT \
- && git checkout FETCH_HEAD
-RUN set -ux \
-# Work around https://github.com/bazelbuild/rules_cc/issues/107
- && sed -i 's%strip_prefix = "rules_cc-master",%strip_prefix = "rules_cc-main",%' WORKSPACE \
- && sed -i 's%rules_cc/archive/master.zip%rules_cc/archive/main.zip%' WORKSPACE
-FROM scratch AS mediapipe-src
-COPY --from=mediapipe-src-builder /w /
+ && git checkout FETCH_HEAD \
+ && rm -rf .git
 
-###FROM ubuntu:20.04 AS base-cpu
+# TODO: switch to newer ubuntu
 FROM --platform=$BUILDPLATFORM docker.io/library/ubuntu:18.04@sha256:139b3846cee2e63de9ced83cee7023a2d95763ee2573e5b0ab6dea9dfbd4db8f AS base-cpu
 WORKDIR /mediapipe
 ENV DEBIAN_FRONTEND=noninteractive
@@ -56,8 +47,6 @@ RUN set -ux \
  && pip3 install wheel \
  && pip3 install future \
  && pip3 install six==1.14.0
- # && pip3 install tensorflow==1.14.0 \
- # && pip3 install tf_slim
 ARG BAZEL_VERSION=3.7.2
 RUN set -ux \
  && mkdir /bazel \
@@ -73,13 +62,13 @@ RUN set -ux \
 #  --unresolved-symbols=ignore-all
 RUN set -ux \
  && echo ' --platform_suffix=-cpu' >/bazelflags
-COPY --from=mediapipe-src / /mediapipe/
 ### RUN set -ux \
 ###  #    # Fix for OpenCV v4
 ###  # && sed -i 's%#include <opencv2/optflow.hpp>%#include <opencv2/video/tracking.hpp>%' mediapipe/framework/port/opencv_video_inc.h \
 ###     # Use OpenCV v4
 ###  && sed -i 's%# "include/%"include/%g' third_party/opencv_linux.BUILD
 RUN \
+  --mount=from=mediapipe-src,source=/w,target=/mediapipe,rw \
   --mount=type=cache,target=/root/.cache/bazel \
     set -ux \
  && bazel build $(cat /bazelflags) \
@@ -89,6 +78,7 @@ RUN \
  && mkdir /x \
  && cp ./bazel-bin/mediapipe/examples/desktop/hello_world/hello_world /x/hello_world_cpu
 RUN \
+  --mount=from=mediapipe-src,source=/w,target=/mediapipe,rw \
   --mount=type=cache,target=/root/.cache/bazel \
     set -ux \
  && bazel build $(cat /bazelflags) \
@@ -111,6 +101,7 @@ RUN set -ux \
 RUN set -ux \
  && echo ' --platform_suffix=-gpu' >/bazelflags
 RUN \
+  --mount=from=mediapipe-src,source=/w,target=/mediapipe,rw \
   --mount=type=cache,target=/root/.cache/bazel \
     set -ux \
  && bazel build $(cat /bazelflags) \
@@ -119,6 +110,7 @@ RUN \
                 mediapipe/examples/desktop/hello_world:hello_world \
  && cp ./bazel-bin/mediapipe/examples/desktop/hello_world/hello_world /x/hello_world_gpu
 RUN \
+  --mount=from=mediapipe-src,source=/w,target=/mediapipe,rw \
   --mount=type=cache,target=/root/.cache/bazel \
     set -ux \
  && bazel build $(cat /bazelflags) \
