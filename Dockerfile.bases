@@ -1,6 +1,10 @@
-# syntax=docker.io/docker/dockerfile:1.2@sha256:e2a8561e419ab1ba6b2fe6cbdf49fd92b95912df1cf7d313c3e2230a333fdbcc
+# syntax=docker.io/docker/dockerfile:1@sha256:42399d4635eddd7a9b8a24be879d2f9a930d0ed040a61324cfdf59ef1357b3b2
 
-FROM --platform=$BUILDPLATFORM docker.io/library/alpine@sha256:234cb88d3020898631af0ccbbcca9a66ae7306ecd30c9720690858c1b007d2a0 AS mediapipe-src
+FROM --platform=$BUILDPLATFORM docker.io/library/alpine@sha256:21a3deaa0d32a8057914f36584b5288d2e5ecc984380bc0118285c70fa8c9300 AS alpine
+# TODO: switch to newer ubuntu
+FROM --platform=$BUILDPLATFORM docker.io/library/ubuntu:18.04@sha256:c2aa13782650aa7ade424b12008128b60034c795f25456e8eb552d0a0f447cad AS ubuntu
+
+FROM alpine AS mediapipe-src
 WORKDIR /w
 ARG MEDIAPIPE_COMMIT
 RUN set -ux \
@@ -11,8 +15,7 @@ RUN set -ux \
  && git checkout FETCH_HEAD \
  && rm -rf .git
 
-# TODO: switch to newer ubuntu
-FROM --platform=$BUILDPLATFORM docker.io/library/ubuntu:18.04@sha256:139b3846cee2e63de9ced83cee7023a2d95763ee2573e5b0ab6dea9dfbd4db8f AS base-cpu
+FROM ubuntu AS base
 WORKDIR /mediapipe
 ENV DEBIAN_FRONTEND=noninteractive
 RUN set -ux \
@@ -47,7 +50,7 @@ RUN set -ux \
  && pip3 install wheel \
  && pip3 install future \
  && pip3 install six==1.14.0
-ARG BAZEL_VERSION=3.7.2
+ARG BAZEL_VERSION=4.2.1
 RUN set -ux \
  && mkdir /bazel \
  && wget --no-check-certificate -O /bazel/installer.sh "https://github.com/bazelbuild/bazel/releases/download/${BAZEL_VERSION}/bazel-${BAZEL_VERSION}-installer-linux-x86_64.sh" \
@@ -61,12 +64,15 @@ RUN set -ux \
 # https://blog.jessfraz.com/post/top-10-favorite-ldflags/
 #  --unresolved-symbols=ignore-all
 RUN set -ux \
+ && mkdir /x \
  && echo ' --platform_suffix=-cpu' >/bazelflags
 ### RUN set -ux \
 ###  #    # Fix for OpenCV v4
 ###  # && sed -i 's%#include <opencv2/optflow.hpp>%#include <opencv2/video/tracking.hpp>%' mediapipe/framework/port/opencv_video_inc.h \
 ###     # Use OpenCV v4
 ###  && sed -i 's%# "include/%"include/%g' third_party/opencv_linux.BUILD
+
+FROM base AS base-cpu
 RUN \
   --mount=from=mediapipe-src,source=/w,target=/mediapipe,rw \
   --mount=type=cache,target=/root/.cache/bazel \
@@ -75,7 +81,6 @@ RUN \
                 -c opt \
                 --define MEDIAPIPE_DISABLE_GPU=1 \
                 mediapipe/examples/desktop/hello_world:hello_world \
- && mkdir /x \
  && cp ./bazel-bin/mediapipe/examples/desktop/hello_world/hello_world /x/hello_world_cpu
 RUN \
   --mount=from=mediapipe-src,source=/w,target=/mediapipe,rw \
@@ -84,21 +89,35 @@ RUN \
  && bazel build $(cat /bazelflags) \
                 -c opt \
                 --define MEDIAPIPE_DISABLE_GPU=1 \
-                mediapipe/examples/desktop/hand_tracking:hand_tracking_cpu \
- && cp ./bazel-bin/mediapipe/examples/desktop/hand_tracking/hand_tracking_cpu /x/
+                //mediapipe/calculators/tflite:tflite_inference_calculator
+RUN \
+  --mount=from=mediapipe-src,source=/w,target=/mediapipe,rw \
+  --mount=type=cache,target=/root/.cache/bazel \
+    set -ux \
+ && bazel build $(cat /bazelflags) \
+                -c opt \
+                --define MEDIAPIPE_DISABLE_GPU=1 \
+                //mediapipe/calculators/tflite:tflite_converter_calculator
+RUN \
+  --mount=from=mediapipe-src,source=/w,target=/mediapipe,rw \
+  --mount=type=cache,target=/root/.cache/bazel \
+    set -ux \
+ && bazel build $(cat /bazelflags) \
+                -c opt \
+                --define MEDIAPIPE_DISABLE_GPU=1 \
+                //mediapipe/calculators/tflite:tflite_tensors_to_detections_calculator
 
 FROM scratch AS hello_world_cpu
 COPY --from=base-cpu /x/hello_world_cpu /
 
 
-FROM base-cpu AS base-gpu
+FROM base AS base-gpu
 RUN set -ux \
  && apt install -y --no-install-recommends \
         mesa-common-dev \
         libegl1-mesa-dev \
         libgles2-mesa-dev \
-        mesa-utils
-RUN set -ux \
+        mesa-utils \
  && echo ' --platform_suffix=-gpu' >/bazelflags
 RUN \
   --mount=from=mediapipe-src,source=/w,target=/mediapipe,rw \
@@ -116,8 +135,23 @@ RUN \
  && bazel build $(cat /bazelflags) \
                 -c opt \
                 --copt -DMESA_EGL_NO_X11_HEADERS --copt -DEGL_NO_X11 \
-                mediapipe/examples/desktop/hand_tracking:hand_tracking_gpu \
- && cp ./bazel-bin/mediapipe/examples/desktop/hand_tracking/hand_tracking_gpu /x/
+                //mediapipe/calculators/tflite:tflite_inference_calculator
+RUN \
+  --mount=from=mediapipe-src,source=/w,target=/mediapipe,rw \
+  --mount=type=cache,target=/root/.cache/bazel \
+    set -ux \
+ && bazel build $(cat /bazelflags) \
+                -c opt \
+                --copt -DMESA_EGL_NO_X11_HEADERS --copt -DEGL_NO_X11 \
+                //mediapipe/calculators/tflite:tflite_converter_calculator
+RUN \
+  --mount=from=mediapipe-src,source=/w,target=/mediapipe,rw \
+  --mount=type=cache,target=/root/.cache/bazel \
+    set -ux \
+ && bazel build $(cat /bazelflags) \
+                -c opt \
+                --copt -DMESA_EGL_NO_X11_HEADERS --copt -DEGL_NO_X11 \
+                //mediapipe/calculators/tflite:tflite_tensors_to_detections_calculator
 
 FROM scratch AS hello_world_gpu
 COPY --from=base-gpu /x/hello_world_gpu /
