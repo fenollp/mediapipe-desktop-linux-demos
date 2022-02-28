@@ -1,29 +1,30 @@
 SLUG ?= google/mediapipe
-COMMIT ?= 33d683c67100ef3db37d9752fcf65d30bea440c4
+COMMIT ?= e6c19885c6d3c6f410c730952aeed2852790d306
 
 BUILD = cat Dockerfile | DOCKER_BUILDKIT=1 docker build --build-arg MEDIAPIPE_COMMIT=$(COMMIT)
 
 
+# From https://google.github.io/mediapipe/solutions/solutions.html
 GRAPH__face_detection_cpu = mediapipe/graphs/face_detection/face_detection_desktop_live.pbtxt
 GRAPH__face_detection_gpu = mediapipe/graphs/face_detection/face_detection_mobile_gpu.pbtxt
 GRAPH__face_mesh_cpu = mediapipe/graphs/face_mesh/face_mesh_desktop_live.pbtxt
 GRAPH__face_mesh_gpu = mediapipe/graphs/face_mesh/face_mesh_desktop_live_gpu.pbtxt
-GRAPH__hair_segmentation_cpu = mediapipe/graphs/hair_segmentation/hair_segmentation_desktop_live.pbtxt
-GRAPH__hair_segmentation_gpu = mediapipe/graphs/hair_segmentation/hair_segmentation_mobile_gpu.pbtxt
+GRAPH__iris_tracking_cpu = mediapipe/graphs/iris_tracking/iris_tracking_cpu.pbtxt
+GRAPH__iris_tracking_gpu = mediapipe/graphs/iris_tracking/iris_tracking_gpu.pbtxt # Fails ; Side packet "focal_length_pixel" is required but was not provided.
 GRAPH__hand_tracking_cpu = mediapipe/graphs/hand_tracking/hand_tracking_desktop_live.pbtxt
 GRAPH__hand_tracking_gpu = mediapipe/graphs/hand_tracking/hand_tracking_desktop_live_gpu.pbtxt
-GRAPH__holistic_tracking_cpu = mediapipe/graphs/holistic_tracking/holistic_tracking_cpu.pbtxt
-GRAPH__holistic_tracking_gpu = mediapipe/graphs/holistic_tracking/holistic_tracking_gpu.pbtxt # Fails ; segfault
-GRAPH__iris_tracking_cpu = mediapipe/graphs/iris_tracking/iris_tracking_cpu.pbtxt
-# GRAPH__iris_tracking_gpu = mediapipe/graphs/iris_tracking/iris_tracking_gpu.pbtxt # Fails ; Side packet "focal_length_pixel" is required but was not provided.
-GRAPH__object_detection_cpu = mediapipe/graphs/object_detection/object_detection_desktop_live.pbtxt
-# GRAPH__object_detection_gpu = NONE
-GRAPH__object_tracking_cpu = mediapipe/graphs/tracking/object_detection_tracking_desktop_live.pbtxt
-# GRAPH__object_tracking_gpu = NONE
 GRAPH__pose_tracking_cpu = mediapipe/graphs/pose_tracking/pose_tracking_cpu.pbtxt
 GRAPH__pose_tracking_gpu = mediapipe/graphs/pose_tracking/pose_tracking_gpu.pbtxt # Fails ; segfault
+GRAPH__holistic_tracking_cpu = mediapipe/graphs/holistic_tracking/holistic_tracking_cpu.pbtxt
+GRAPH__holistic_tracking_gpu = mediapipe/graphs/holistic_tracking/holistic_tracking_gpu.pbtxt # Fails ; segfault
 GRAPH__selfie_segmentation_cpu = mediapipe/graphs/selfie_segmentation/selfie_segmentation_cpu.pbtxt
 GRAPH__selfie_segmentation_gpu = mediapipe/graphs/selfie_segmentation/selfie_segmentation_gpu.pbtxt
+GRAPH__hair_segmentation_cpu = mediapipe/graphs/hair_segmentation/hair_segmentation_desktop_live.pbtxt
+GRAPH__hair_segmentation_gpu = mediapipe/graphs/hair_segmentation/hair_segmentation_mobile_gpu.pbtxt
+GRAPH__object_detection_cpu = mediapipe/graphs/object_detection/object_detection_desktop_live.pbtxt
+GRAPH__object_detection_gpu = mediapipe/graphs/object_detection/object_detection_mobile_gpu.pbtxt # Fails ; no such target
+GRAPH__object_tracking_cpu = mediapipe/graphs/tracking/object_detection_tracking_desktop_live.pbtxt
+GRAPH__object_tracking_gpu = mediapipe/graphs/tracking/object_detection_tracking_mobile_gpu.pbtxt # Fails ; no such target
 # GRAPH__objectron https://google.github.io/mediapipe/solutions/objectron.html#desktop
 
 GRAPHS = $(subst GRAPH__,,$(filter GRAPH__%,$(.VARIABLES)))
@@ -105,11 +106,12 @@ ASSETS += mediapipe/models/ssdlite_object_detection_labelmap.txt
 ASSETS += mediapipe/modules/face_detection/face_detection_short_range.tflite
 ASSETS += mediapipe/modules/face_landmark/face_landmark.tflite
 ASSETS += mediapipe/modules/face_landmark/face_landmark_with_attention.tflite
-ASSETS += mediapipe/modules/hand_landmark/hand_landmark.tflite
+ASSETS += mediapipe/modules/hand_landmark/hand_landmark_full.tflite
 ASSETS += mediapipe/modules/hand_landmark/handedness.txt
 ASSETS += mediapipe/modules/holistic_landmark/hand_recrop.tflite
 ASSETS += mediapipe/modules/iris_landmark/iris_landmark.tflite
-ASSETS += mediapipe/modules/palm_detection/palm_detection.tflite
+ASSETS += mediapipe/modules/palm_detection/palm_detection_full.tflite
+ASSETS += mediapipe/modules/palm_detection/palm_detection_lite.tflite
 ASSETS += mediapipe/modules/pose_detection/pose_detection.tflite
 ASSETS += mediapipe/modules/pose_landmark/pose_landmark_full.tflite
 ASSETS += mediapipe/modules/selfie_segmentation/selfie_segmentation.tflite
@@ -124,7 +126,21 @@ bin/%: Dockerfile
 	$(BUILD) --target=$* -o=bin/ -
 	test -x $@
 
+docker-bake.hcl: Dockerfile
+	cat docker-bake-base.hcl | sed 's%MEDIAPIPE_COMMIT_value%$(COMMIT)%' >docker-bake.hcl
+	echo >>docker-bake.hcl
+	echo 'group "bins" {' >>docker-bake.hcl
+	echo '  targets = [' >>docker-bake.hcl
+	echo '    "libs",' >>docker-bake.hcl
+	$(foreach ex,$(GRAPHS),echo '    "$(ex)",' >>docker-bake.hcl;)
+	echo '  ]' >>docker-bake.hcl
+	echo '}' >>docker-bake.hcl
+	echo >>docker-bake.hcl
+	$(foreach ex,$(GRAPHS),cat docker-bake-bin.hcl | sed 's%EXAMPLE%$(ex)%g' >>docker-bake.hcl;)
+
 bins: $(foreach g, $(sort $(GRAPHS)), bin/$(g))
+# bins: docker-bake.hcl
+# 	DOCKER_BUILDKIT=1 docker buildx bake bins
 
 run.%: $(ASSETS) $(LIBS) bin/%
 	@LD_PRELOAD="$(PWD)/$(subst $(eval) ,:$(PWD)/,$(LIBS))" \
@@ -137,4 +153,6 @@ clean:
 	$(if $(wildcard bin/*), $(RM) bin/*)
 	$(if $(wildcard lib/*), $(RM) lib/*)
 	$(if $(wildcard mediapipe/*), $(RM) -r mediapipe)
+
+distclean: clean
 	docker system prune -a
