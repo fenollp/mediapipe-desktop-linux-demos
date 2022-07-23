@@ -8,7 +8,7 @@ group "default" {
 target "dockerfile" {
   dockerfile = "Dockerfile"
   args = {
-    "MEDIAPIPE_COMMIT" = "e6c19885c6d3c6f410c730952aeed2852790d306"
+    "MEDIAPIPE_COMMIT" = "63e679d99ca45b30514a9d84c9351a2d77bb9ba0"
   }
 }
 
@@ -21,26 +21,26 @@ target "libs" {
 group "bins" {
   targets = [
     "libs",
-    "selfie_segmentation_cpu",
-    "object_detection_cpu",
-    "holistic_tracking_gpu",
-    "hair_segmentation_gpu",
-    "holistic_tracking_cpu",
-    "object_detection_gpu",
-    "selfie_segmentation_gpu",
-    "iris_tracking_gpu",
-    "pose_tracking_gpu",
-    "hair_segmentation_cpu",
     "face_detection_cpu",
+    "face_detection_gpu",
     "face_mesh_cpu",
+    "face_mesh_gpu",
+    "hair_segmentation_cpu",
+    "hair_segmentation_gpu",
+    "hand_tracking_cpu",
     "hand_tracking_gpu",
+    "holistic_tracking_cpu",
+    "holistic_tracking_gpu",
+    "iris_tracking_cpu",
+    "iris_tracking_gpu",
+    "object_detection_cpu",
+    "object_detection_gpu",
     "object_tracking_cpu",
     "object_tracking_gpu",
-    "iris_tracking_cpu",
     "pose_tracking_cpu",
-    "face_detection_gpu",
-    "face_mesh_gpu",
-    "hand_tracking_cpu",
+    "pose_tracking_gpu",
+    "selfie_segmentation_cpu",
+    "selfie_segmentation_gpu",
   ]
 }
 

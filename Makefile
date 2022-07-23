@@ -1,5 +1,5 @@
 SLUG ?= google/mediapipe
-COMMIT ?= e6c19885c6d3c6f410c730952aeed2852790d306
+COMMIT ?= 63e679d99ca45b30514a9d84c9351a2d77bb9ba0
 
 BUILD = cat Dockerfile | DOCKER_BUILDKIT=1 docker build --build-arg MEDIAPIPE_COMMIT=$(COMMIT)
 
@@ -132,7 +132,7 @@ docker-bake.hcl: Dockerfile
 	echo 'group "bins" {' >>docker-bake.hcl
 	echo '  targets = [' >>docker-bake.hcl
 	echo '    "libs",' >>docker-bake.hcl
-	$(foreach ex,$(GRAPHS),echo '    "$(ex)",' >>docker-bake.hcl;)
+	$(foreach ex,$(sort $(GRAPHS)),echo '    "$(ex)",' >>docker-bake.hcl;)
 	echo '  ]' >>docker-bake.hcl
 	echo '}' >>docker-bake.hcl
 	echo >>docker-bake.hcl

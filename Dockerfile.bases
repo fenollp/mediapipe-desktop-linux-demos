@@ -50,7 +50,7 @@ RUN set -ux \
  && pip3 install wheel \
  && pip3 install future \
  && pip3 install six==1.14.0
-ARG BAZEL_VERSION=4.2.1
+ARG BAZEL_VERSION=5.2.0
 RUN set -ux \
  && mkdir /bazel \
  && wget --no-check-certificate -O /bazel/installer.sh "https://github.com/bazelbuild/bazel/releases/download/${BAZEL_VERSION}/bazel-${BAZEL_VERSION}-installer-linux-x86_64.sh" \
