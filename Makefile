@@ -132,7 +132,7 @@ docker-bake.hcl: Dockerfile
 	echo 'group "bins" {' >>docker-bake.hcl
 	echo '  targets = [' >>docker-bake.hcl
 	echo '    "libs",' >>docker-bake.hcl
-	$(foreach ex,$(GRAPHS),echo '    "$(ex)",' >>docker-bake.hcl;)
+	$(foreach ex,$(sort $(GRAPHS)),echo '    "$(ex)",' >>docker-bake.hcl;)
 	echo '  ]' >>docker-bake.hcl
 	echo '}' >>docker-bake.hcl
 	echo >>docker-bake.hcl
